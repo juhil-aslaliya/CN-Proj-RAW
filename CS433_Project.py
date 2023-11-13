@@ -1,8 +1,7 @@
 """ When submitting, remove many lines in such 3-quotes, cuz they are instructions. """
 
-import socket, threading, sys, time, os, signal, time
+import socket, threading, sys, time, os, signal
 
-lock = threading.Lock()
 if(not(os.path.exists("Logs"))): os.mkdir("Logs")
 log_file_name = "Logs/logs_" + str(time.localtime()[0])[2:] + str(time.localtime()[1]) + str(time.localtime()[2]) + "_" + str(time.localtime()[3]) + str(time.localtime()[4]) + str(time.localtime()[5]) + ".py"
 
@@ -31,24 +30,10 @@ class ProxyServer:
         self.server.bind((host,port))
         self.server.listen(5)
         self.cache = {}
-        self.cache_times = 0
+        self.cache_len = 0
         self.blocked_urls = ["example.com"]
         self.forbidden_url_message = "\nThis URL is blocked by proxy."
-        self.uncache_time = 4.5 # <<<<<<<<--------------------------------------------- Change this later
         logg(0,f"\n[*] Proxy server started on {host}:{port} .\n")
-
-
-    def uncache(self):
-        while(1):
-            logg(1,f"\n Cache invalidated at this time : {time.time()} . \n")
-            with lock:      # Because the cache is a shared resourse between Uncache thread & client_handler threads
-                curr_time = time.time()
-                for url in self.cache:
-                    if(self.cache[url][1] - curr_time >= self.uncache_time):
-                        del self.cache[url]
-            time.sleep(self.uncache_time)
-            logg(1,f"\n Cache status at this time is : {self.cache} . \n")
-
 
     def handle_client(self,client_socket):
         """ Proccesses a request for a client, using our implemented proxy. """
@@ -58,7 +43,6 @@ class ProxyServer:
         url = first_line.split(b' ')[1]
         logg(1,str(first_line[2:])+" is the first line of request.")
         
-
         # Check if URL is blocked
         for blocked_url in self.blocked_urls:
             if blocked_url.encode() in url:
@@ -67,11 +51,18 @@ class ProxyServer:
                 logg(1,"Forbidden URL. Closing.\n")
                 return
         
-
         # Check if URL is cached
         if url in self.cache:
-            with lock:          # Cache is shared between uncaching/using
-                client_socket.send(self.cache[url][0])
+            not_expired_flag = 1
+            
+            """ ADD/WRITE THE UNCACHING MECHANISM HERE. 
+            # FOR UN-CACHING THE CACHED DATA 
+            # 1. Look at the headers in the http packets to extract timeout. 
+            # 2. We need to devise certain mechanism to generate timeout duration ourselves for the sites. 
+            # If expired, turn off the above `not_expired_flag`. """
+
+            if(not_expired_flag):
+                client_socket.send(self.cache[url])
                 client_socket.close()
                 logg(1,"Cahed URL. Sending cached.\n")
                 return
@@ -119,11 +110,12 @@ class ProxyServer:
             client_socket.send(response_data)
             client_socket.close()
 
+
+            """ HERE SET THE EXPIRY TIME/CONDITION """
             # Cache the response
-            with lock:
-                self.cache[url] = [response_data, time.time()]
-            self.cache_times += 1
-            logg(1,f"Times we cached the data is {self.cache_times} .")
+            self.cache[url] = response_data     
+            self.cache_len += 1
+            logg(1,f"Length of cache is {self.cache_len} .")
 
 
         except Exception as e:
@@ -134,18 +126,12 @@ class ProxyServer:
 
     def run(self):
         """ To run our implemented proxy server. """
-
-        # To invalidate the cache / uncaching independently any client or request
-        cache_cleaner = threading.Thread(target=self.uncache)
-        cache_cleaner.start()
-        
         logg(0,f"\n-> Press Ctrl+C to exit. Though, it may take some time.")
         while(1):
-            client_sock, host_ip_port = self.server.accept()    # Get a request from a client
+            client_sock, host_ip_port = self.server.accept()
             logg(0,f"\n[*] Received connection from {host_ip_port[0]}:{host_ip_port[1]} .")
             client_handler = threading.Thread(target=self.handle_client, args=(client_sock,))
             client_handler.start()
-
 
 if __name__ == "__main__":
     proxy = ProxyServer("0.0.0.0",8080)
