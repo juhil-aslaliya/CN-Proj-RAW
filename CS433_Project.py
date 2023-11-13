@@ -44,9 +44,12 @@ class ProxyServer:
             logg(1,f"\n Cache invalidated at this time : {time.time()} . \n")
             with lock:      # Because the cache is a shared resourse between Uncache thread & client_handler threads
                 curr_time = time.time()
+                l = []
                 for url in self.cache:
-                    if(self.cache[url][1] - curr_time >= self.uncache_time):
-                        del self.cache[url]
+                    if(curr_time - self.cache[url][1] >= self.uncache_time):
+                        l.append(url)
+                for url in l:
+                    self.cache.pop(url)
             time.sleep(self.uncache_time)
             logg(1,f"\n Cache status at this time is : {self.cache} . \n")
 
